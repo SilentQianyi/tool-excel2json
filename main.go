@@ -35,8 +35,13 @@ func main() {
 
 	for _, filename := range filenames {
 
+		if strings.HasSuffix(filename, ".xlsx") == false {
+			log.Println(fmt.Sprintf("strings.HasSuffix xlsx error! dirname[ %s ], filename[ %s ]", dirname, filename))
+			continue
+		}
+
 		if strings.HasPrefix(filename, "~") {
-			log.Println(fmt.Sprintf("strings.HasPrefix error! dirname[ %s ], filename[ %s ]", dirname, filename))
+			log.Println(fmt.Sprintf("strings.HasPrefix ~ error! dirname[ %s ], filename[ %s ]", dirname, filename))
 			continue
 		}
 
