@@ -210,7 +210,7 @@ func toJson(dataRows []rowdata, metaList []*Meta) string {
 				if row[idx] == nil || row[idx] == "" {
 					ret += "[]"
 				} else {
-					ret += fmt.Sprintf("[%s]", row[idx])
+					ret += fmt.Sprintf("%s", row[idx])
 				}
 			case "Vector2":
 				if row[idx] == nil || row[idx] == "" {
