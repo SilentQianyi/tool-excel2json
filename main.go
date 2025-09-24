@@ -68,10 +68,14 @@ func OpenFile(dirname string, filename string, outPath string) (err error) {
 
 	sheetList := f.GetSheetList()
 
+	// TODO: 预处理结构问题
+	exportMap := make(map[string]string)
+	preDataMap := make(map[string]map[string]string)
+
 	for _, sheet := range sheetList {
 
 		if strings.HasPrefix(sheet, "sheet") || strings.HasPrefix(sheet, "Sheet") {
-			log.Println(fmt.Sprintf("strings.HasPrefix 2 error! dirname[ %s ], filename[ %s ], sheet[ %s ]", dirname, filename, sheet))
+			log.Println(fmt.Sprintf("OpenFile strings.HasPrefix 2 error! dirname[ %s ], filename[ %s ], sheet[ %s ]", dirname, filename, sheet))
 			continue
 		}
 
@@ -81,8 +85,13 @@ func OpenFile(dirname string, filename string, outPath string) (err error) {
 			return err
 		}
 
-		if rows[0] == nil || (rows[0][0] != "export=server" && rows[0][0] != "export=host") {
-			log.Println(fmt.Sprintf("export error! dirname[ %s ], filename[ %s ], sheet[ %s ]", dirname, filename, sheet))
+		if rows[0] == nil {
+			log.Println(fmt.Sprintf("OpenFile export error! dirname[ %s ], filename[ %s ], sheet[ %s ]", dirname, filename, sheet))
+			continue
+		}
+
+		if len(rows[0][0]) == 0 {
+			log.Println(fmt.Sprintf("OpenFile export error 2! dirname[ %s ], filename[ %s ], sheet[ %s ]", dirname, filename, sheet))
 			continue
 		}
 
@@ -92,7 +101,51 @@ func OpenFile(dirname string, filename string, outPath string) (err error) {
 			return err
 		}
 
-		output(outPath, fmt.Sprintf("%s.json", sheet), toJson(curDataList, curMetaList))
+		outMap := toJsonStruct(curDataList, curMetaList)
+		preDataMap[sheet] = outMap
+		// for key, str := range outMap {
+		// 	log.Println(fmt.Sprintf("OpenFile sheet[ %s ], key[ %s ], str[ %s ]", sheet, key, str))
+		// }
+		// log.Println(fmt.Sprintf("OpenFile sheet[ %s ] end", sheet))
+	}
+
+	for _, sheet := range sheetList {
+
+		if strings.HasPrefix(sheet, "sheet") || strings.HasPrefix(sheet, "Sheet") {
+			log.Println(fmt.Sprintf("OpenFile 2 strings.HasPrefix 2 error! dirname[ %s ], filename[ %s ], sheet[ %s ]", dirname, filename, sheet))
+			continue
+		}
+
+		rows, err := f.GetRows(sheet)
+		if err != nil {
+			log.Fatal(fmt.Sprintf("OpenFile 2 f.GetCols error! filename[ %s ], sheet[ %s ], err[ %s ]", filename, sheet, err.Error()))
+			return err
+		}
+
+		if rows[0] == nil {
+			log.Println(fmt.Sprintf("OpenFile 2 export error! dirname[ %s ], filename[ %s ], sheet[ %s ]", dirname, filename, sheet))
+			continue
+		}
+
+		if len(rows[0][0]) == 0 {
+			log.Println(fmt.Sprintf("OpenFile 2 export error 2! dirname[ %s ], filename[ %s ], sheet[ %s ]", dirname, filename, sheet))
+			continue
+		}
+
+		curDataList, curMetaList, err := OpenSheet(rows)
+		if err != nil {
+			log.Fatal(fmt.Sprintf("OpenFile 2 OpenSheet error! filename[ %s ], sheet[ %s ], err[ %s ]", filename, sheet, err.Error()))
+			return err
+		}
+
+		if rows[0][0] == "export=server" || rows[0][0] == "export=host" {
+			log.Println(fmt.Sprintf("OpenFile 2 sheet[ %s ]", sheet))
+			exportMap[sheet] = toJson(curDataList, curMetaList, preDataMap)
+		}
+	}
+
+	for sheet, str := range exportMap {
+		output(outPath, fmt.Sprintf("%s.json", sheet), str)
 	}
 
 	return nil
@@ -150,7 +203,126 @@ func OpenSheet(rows [][]string) (dataList []rowdata, metaList []*Meta, err error
 	return dataList, metaList, nil
 }
 
-func toJson(dataRows []rowdata, metaList []*Meta) string {
+func toJsonStruct(dataRows []rowdata, metaList []*Meta) map[string]string {
+	enumValueMap := make(map[string]int)
+	enumMap := make(map[string]map[string]int)
+	dataMap := make(map[string]string)
+
+	for _, row := range dataRows {
+		id := ""
+		line := "{"
+		for idx, meta := range metaList {
+			line += fmt.Sprintf("\n\t\t\t\t\"%s\": ", meta.Key)
+			switch meta.Typ {
+			case "string":
+				if row[idx] == nil || row[idx] == "" {
+					line += "\"\""
+				} else {
+					str := fmt.Sprintf("\"%s\"", strings.ReplaceAll(row[idx].(string), "\"", "\\\""))
+					line += str
+				}
+			case "int":
+				if meta.Key == "Id" {
+					if row[idx] == nil || row[idx] == "" {
+						line += "0"
+					} else {
+						id = fmt.Sprintf("%s", row[idx])
+						line += id
+					}
+				}
+				fallthrough
+			case "uint":
+				fallthrough
+			case "float":
+				if row[idx] == nil || row[idx] == "" {
+					line += "0"
+				} else {
+					line += fmt.Sprintf("%s", row[idx])
+				}
+			case "Enum":
+				if row[idx] == nil || row[idx] == "" {
+					line += "0"
+				} else {
+					key := meta.Key
+					_, ok := enumMap[key]
+					if !ok {
+						enumMap[key] = make(map[string]int)
+						enumValueMap[key] = 0
+					}
+					_, ok = enumMap[key][row[idx].(string)]
+					if !ok {
+						enumMap[key][row[idx].(string)] = enumValueMap[key]
+						enumValueMap[key]++
+					}
+
+					line += fmt.Sprintf("%d", enumMap[key][row[idx].(string)])
+				}
+			case "bool":
+				if row[idx] == nil || row[idx] == "" {
+					line += "false"
+				} else if strings.ToLower(row[idx].(string)) == "true" {
+					line += "true"
+				} else {
+					line += "false"
+				}
+			case "ints":
+				fallthrough
+			case "uints":
+				fallthrough
+			case "strings":
+				if row[idx] == nil || row[idx] == "" {
+					line += "[]"
+				} else {
+					line += fmt.Sprintf("%s", row[idx])
+				}
+			case "Vector2":
+				if row[idx] == nil || row[idx] == "" {
+					line += "{\n\t\t\t\t\t\"x\": 0,\n\t\t\t\t\t\"y\": 0\n\t\t\t\t}"
+				} else {
+					newRow := strings.ReplaceAll(row[idx].(string), "(", "")
+					newRow = strings.ReplaceAll(newRow, ")", "")
+					newRowList := strings.Split(newRow, ",")
+					if len(newRowList) != 2 {
+						line += "{\n\t\t\t\t\t\"x\": 0,\n\t\t\t\t\t\"y\": 0\n\t\t\t\t}"
+					} else {
+						line += fmt.Sprintf("{\n\t\t\t\t\t\"x\": %s,\n\t\t\t\t\t\"y\": %s\n\t\t\t\t}", newRowList[0], newRowList[1])
+					}
+				}
+			case "Vector3":
+				if row[idx] == nil || row[idx] == "" {
+					line += "{\n\t\t\t\t\t\"x\": 0,\n\t\t\t\t\t\"y\": 0,\n\t\t\t\t\t\"z\": 0\n\t\t\t\t}"
+				} else {
+					newRow := strings.ReplaceAll(row[idx].(string), "(", "")
+					newRow = strings.ReplaceAll(newRow, ")", "")
+					newRowList := strings.Split(newRow, ",")
+					if len(newRowList) != 3 {
+						line += "{\n\t\t\t\t\t\"x\": 0,\n\t\t\t\t\t\"y\": 0,\n\t\t\t\t\t\"z\": 0\n\t\t\t\t}"
+					} else {
+						line += fmt.Sprintf("{\n\t\t\t\t\t\"x\": %s,\n\t\t\t\t\t\"y\": %s,\n\t\t\t\t\t\"z\": %s\n\t\t\t\t}", newRowList[0], newRowList[1], newRowList[2])
+					}
+				}
+			default:
+				if row[idx] == nil || row[idx] == "" {
+					line += "0"
+				} else {
+					line += fmt.Sprintf("%s", row[idx])
+				}
+			}
+			line += ","
+		}
+
+		line = line[:len(line)-1]
+
+		line += "\n\t\t\t}"
+		if len(id) > 0 {
+			dataMap[id] = line
+		}
+	}
+
+	return dataMap
+}
+
+func toJson(dataRows []rowdata, metaList []*Meta, preDataMap map[string]map[string]string) string {
 	enumValueMap := make(map[string]int)
 	enumMap := make(map[string]map[string]int)
 
@@ -237,6 +409,45 @@ func toJson(dataRows []rowdata, metaList []*Meta) string {
 					} else {
 						ret += fmt.Sprintf("{\n\t\t\t\"x\": %s,\n\t\t\t\"y\": %s,\n\t\t\t\"z\": %s\n\t\t}", newRowList[0], newRowList[1], newRowList[2])
 					}
+				}
+			case "Struct":
+				if row[idx] == nil || row[idx] == "" || preDataMap[meta.Key] == nil || preDataMap[meta.Key][row[idx].(string)] == "" {
+					log.Fatalln(fmt.Sprintf("toJson preDataMap key[ %s ], val[ %s ]", meta.Key, row[idx].(string)))
+					ret += "{}"
+				} else {
+					log.Println(fmt.Sprintf("toJson key[ %s ], val[ %s ]", meta.Key, row[idx].(string)))
+					ret += preDataMap[meta.Key][row[idx].(string)]
+				}
+			case "StructList":
+				if row[idx] == nil || row[idx] == "" {
+					ret += "[]"
+				} else {
+					str := row[idx].(string)
+					str = strings.ReplaceAll(str, "[", "")
+					str = strings.ReplaceAll(str, "]", "")
+					strList := strings.Split(str, ",")
+					ret += "[\n\t\t\t"
+					for _, key := range strList {
+						// log.Println(fmt.Sprintf("toJson 2 key[ %s ], val[ %s ]", meta.Key, key))
+						_, ok1 := preDataMap[meta.Key]
+						if !ok1 {
+							log.Fatalln(fmt.Sprintf("toJson preDataMap 2 key[ %s ], val[ %s ]", meta.Key, row[idx].(string)))
+							ret += "[]"
+							break
+						} else {
+							_, ok2 := preDataMap[meta.Key][key]
+							if !ok2 {
+								log.Fatalln(fmt.Sprintf("toJson preDataMap 3 key[ %s ], val[ %s ]", meta.Key, row[idx].(string)))
+								ret += "[]"
+								break
+							} else {
+								ret += preDataMap[meta.Key][key]
+							}
+						}
+						ret += ",\n\t\t\t"
+					}
+					ret = ret[:len(ret)-5]
+					ret += "\n\t\t]"
 				}
 			default:
 				if row[idx] == nil || row[idx] == "" {
