@@ -222,16 +222,14 @@ func toJsonStruct(dataRows []rowdata, metaList []*Meta) map[string]string {
 					line += str
 				}
 			case "int":
-				if meta.Key == "Id" {
-					if row[idx] == nil || row[idx] == "" {
-						line += "0"
-					} else {
-						id = fmt.Sprintf("%s", row[idx])
-						line += id
-					}
-				}
 				fallthrough
 			case "uint":
+				if meta.Key == "Id" {
+					if row[idx] == nil || row[idx] == "" {
+						break
+					}
+					id = fmt.Sprintf("%s", row[idx])
+				}
 				fallthrough
 			case "float":
 				if row[idx] == nil || row[idx] == "" {
@@ -314,9 +312,10 @@ func toJsonStruct(dataRows []rowdata, metaList []*Meta) map[string]string {
 		line = line[:len(line)-1]
 
 		line += "\n\t\t\t}"
-		if len(id) > 0 {
-			dataMap[id] = line
+		if len(id) == 0 || id == "0" {
+			break
 		}
+		dataMap[id] = line
 	}
 
 	return dataMap
@@ -328,29 +327,36 @@ func toJson(dataRows []rowdata, metaList []*Meta, preDataMap map[string]map[stri
 
 	ret := "["
 	for _, row := range dataRows {
-		ret += "\n\t{"
+		id := ""
+		line := "\n\t{"
 		for idx, meta := range metaList {
-			ret += fmt.Sprintf("\n\t\t\"%s\": ", meta.Key)
+			line += fmt.Sprintf("\n\t\t\"%s\": ", meta.Key)
 			switch meta.Typ {
 			case "string":
 				if row[idx] == nil || row[idx] == "" {
-					ret += "\"\""
+					line += "\"\""
 				} else {
-					ret += fmt.Sprintf("\"%s\"", strings.ReplaceAll(row[idx].(string), "\"", "\\\""))
+					line += fmt.Sprintf("\"%s\"", strings.ReplaceAll(row[idx].(string), "\"", "\\\""))
 				}
 			case "int":
 				fallthrough
 			case "uint":
+				if meta.Key == "Id" {
+					if row[idx] == nil || row[idx] == "" {
+						break
+					}
+					id = fmt.Sprintf("%s", row[idx])
+				}
 				fallthrough
 			case "float":
 				if row[idx] == nil || row[idx] == "" {
-					ret += "0"
+					line += "0"
 				} else {
-					ret += fmt.Sprintf("%s", row[idx])
+					line += fmt.Sprintf("%s", row[idx])
 				}
 			case "Enum":
 				if row[idx] == nil || row[idx] == "" {
-					ret += "0"
+					line += "0"
 				} else {
 					key := meta.Key
 					_, ok := enumMap[key]
@@ -364,15 +370,15 @@ func toJson(dataRows []rowdata, metaList []*Meta, preDataMap map[string]map[stri
 						enumValueMap[key]++
 					}
 
-					ret += fmt.Sprintf("%d", enumMap[key][row[idx].(string)])
+					line += fmt.Sprintf("%d", enumMap[key][row[idx].(string)])
 				}
 			case "bool":
 				if row[idx] == nil || row[idx] == "" {
-					ret += "false"
+					line += "false"
 				} else if strings.ToLower(row[idx].(string)) == "true" {
-					ret += "true"
+					line += "true"
 				} else {
-					ret += "false"
+					line += "false"
 				}
 			case "ints":
 				fallthrough
@@ -380,87 +386,91 @@ func toJson(dataRows []rowdata, metaList []*Meta, preDataMap map[string]map[stri
 				fallthrough
 			case "strings":
 				if row[idx] == nil || row[idx] == "" {
-					ret += "[]"
+					line += "[]"
 				} else {
-					ret += fmt.Sprintf("%s", row[idx])
+					line += fmt.Sprintf("%s", row[idx])
 				}
 			case "Vector2":
 				if row[idx] == nil || row[idx] == "" {
-					ret += "{\n\t\t\t\"x\": 0,\n\t\t\t\"y\": 0\n\t\t}"
+					line += "{\n\t\t\t\"x\": 0,\n\t\t\t\"y\": 0\n\t\t}"
 				} else {
 					newRow := strings.ReplaceAll(row[idx].(string), "(", "")
 					newRow = strings.ReplaceAll(newRow, ")", "")
 					newRowList := strings.Split(newRow, ",")
 					if len(newRowList) != 2 {
-						ret += "{\n\t\t\t\"x\": 0,\n\t\t\t\"y\": 0\n\t\t}"
+						line += "{\n\t\t\t\"x\": 0,\n\t\t\t\"y\": 0\n\t\t}"
 					} else {
-						ret += fmt.Sprintf("{\n\t\t\t\"x\": %s,\n\t\t\t\"y\": %s\n\t\t}", newRowList[0], newRowList[1])
+						line += fmt.Sprintf("{\n\t\t\t\"x\": %s,\n\t\t\t\"y\": %s\n\t\t}", newRowList[0], newRowList[1])
 					}
 				}
 			case "Vector3":
 				if row[idx] == nil || row[idx] == "" {
-					ret += "{\n\t\t\t\"x\": 0,\n\t\t\t\"y\": 0,\n\t\t\t\"z\": 0\n\t\t}"
+					line += "{\n\t\t\t\"x\": 0,\n\t\t\t\"y\": 0,\n\t\t\t\"z\": 0\n\t\t}"
 				} else {
 					newRow := strings.ReplaceAll(row[idx].(string), "(", "")
 					newRow = strings.ReplaceAll(newRow, ")", "")
 					newRowList := strings.Split(newRow, ",")
 					if len(newRowList) != 3 {
-						ret += "{\n\t\t\t\"x\": 0,\n\t\t\t\"y\": 0,\n\t\t\t\"z\": 0\n\t\t}"
+						line += "{\n\t\t\t\"x\": 0,\n\t\t\t\"y\": 0,\n\t\t\t\"z\": 0\n\t\t}"
 					} else {
-						ret += fmt.Sprintf("{\n\t\t\t\"x\": %s,\n\t\t\t\"y\": %s,\n\t\t\t\"z\": %s\n\t\t}", newRowList[0], newRowList[1], newRowList[2])
+						line += fmt.Sprintf("{\n\t\t\t\"x\": %s,\n\t\t\t\"y\": %s,\n\t\t\t\"z\": %s\n\t\t}", newRowList[0], newRowList[1], newRowList[2])
 					}
 				}
 			case "Struct":
 				if row[idx] == nil || row[idx] == "" || preDataMap[meta.Key] == nil || preDataMap[meta.Key][row[idx].(string)] == "" {
 					log.Fatalln(fmt.Sprintf("toJson preDataMap key[ %s ], val[ %s ]", meta.Key, row[idx].(string)))
-					ret += "{}"
+					line += "{}"
 				} else {
 					log.Println(fmt.Sprintf("toJson key[ %s ], val[ %s ]", meta.Key, row[idx].(string)))
-					ret += preDataMap[meta.Key][row[idx].(string)]
+					line += preDataMap[meta.Key][row[idx].(string)]
 				}
 			case "StructList":
 				if row[idx] == nil || row[idx] == "" {
-					ret += "[]"
+					line += "[]"
 				} else {
 					str := row[idx].(string)
 					str = strings.ReplaceAll(str, "[", "")
 					str = strings.ReplaceAll(str, "]", "")
 					strList := strings.Split(str, ",")
-					ret += "[\n\t\t\t"
+					line += "[\n\t\t\t"
 					for _, key := range strList {
 						// log.Println(fmt.Sprintf("toJson 2 key[ %s ], val[ %s ]", meta.Key, key))
 						_, ok1 := preDataMap[meta.Key]
 						if !ok1 {
 							log.Fatalln(fmt.Sprintf("toJson preDataMap 2 key[ %s ], val[ %s ]", meta.Key, row[idx].(string)))
-							ret += "[]"
+							line += "[]"
 							break
 						} else {
 							_, ok2 := preDataMap[meta.Key][key]
 							if !ok2 {
 								log.Fatalln(fmt.Sprintf("toJson preDataMap 3 key[ %s ], val[ %s ]", meta.Key, row[idx].(string)))
-								ret += "[]"
+								line += "[]"
 								break
 							} else {
-								ret += preDataMap[meta.Key][key]
+								line += preDataMap[meta.Key][key]
 							}
 						}
-						ret += ",\n\t\t\t"
+						line += ",\n\t\t\t"
 					}
-					ret = ret[:len(ret)-5]
-					ret += "\n\t\t]"
+					line = line[:len(line)-5]
+					line += "\n\t\t]"
 				}
 			default:
 				if row[idx] == nil || row[idx] == "" {
-					ret += "0"
+					line += "0"
 				} else {
-					ret += fmt.Sprintf("%s", row[idx])
+					line += fmt.Sprintf("%s", row[idx])
 				}
 			}
-			ret += ","
+			line += ","
 		}
-		ret = ret[:len(ret)-1]
+		line = line[:len(line)-1]
 
-		ret += "\n\t},"
+		line += "\n\t},"
+
+		if len(id) > 0 && id != "0" {
+			ret += line
+		}
 	}
 	ret = ret[:len(ret)-1]
 
