@@ -312,7 +312,7 @@ func toJsonStruct(dataRows []rowdata, metaList []*Meta) map[string]string {
 		line = line[:len(line)-1]
 
 		line += "\n\t\t\t}"
-		if len(id) == 0 || id == "0" {
+		if len(id) == 0 {
 			break
 		}
 		dataMap[id] = line
@@ -468,7 +468,7 @@ func toJson(dataRows []rowdata, metaList []*Meta, preDataMap map[string]map[stri
 
 		line += "\n\t},"
 
-		if len(id) > 0 && id != "0" {
+		if len(id) > 0 {
 			ret += line
 		}
 	}
